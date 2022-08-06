@@ -26,8 +26,9 @@ SIGNATURE_FILE = "signature.bin"
 SIGNATURE_FILE64 = "signature.b64"
 
 # Dictionary mit allen wichtigen Einträgen zur aktuellen JokerChain
-JOKER_CHAIN = {'lines':[], 'adminhash':'', 'adminkey':'', 'myhash':'', 'mypubkey':'', 'tokens':[], 'admin':False, 'keys':{}}
-
+JOKER_CHAIN = {'lines':[], 'adminhash':'', 'adminkey':'', 'myhash':'', 'mypubkey':'', 'tokens':{}, 'admin':False, 'keys':{}, 'mytransactions':[]}
+# keys[hash]=publickey
+# tokens[hash]=[t0, t1, t2]
 
 #################################
 # Diese Box wurde mit           #
@@ -160,19 +161,19 @@ def new_joker_chain():
     entry += get_public_key()
     entry += "## keyhash\n"
     JOKER_CHAIN['myhash'] = get_hash_from_key_file(PUBLIC_KEY_FILE)
-    entry += JOKER_CHAIN['myhash']+"\n";
-    entry += timestamp()
-    entry += "## signature\n"
-    signed = entry
-    signature = unterschreiben(entry)
-    entry += signature
+    entry += JOKER_CHAIN['myhash']+"\n";    
     JOKER_CHAIN['lines']=entry.strip().split("\n")
     JOKER_CHAIN['admin']=True
-    # print(entry)
-    # unterschrift_pruefen(signed, signature, get_public_key())
-    with open(JOKER_CHAIN_FILE, "w") as f:
-        f.write(entry)
-    boxprint("New joker chain initialized")
+    sign_chain();
+    save_joker_chain()
+
+def sign_chain():
+    if not JOKER_CHAIN['admin']:
+        raise PermissionError("Sie sind nicht der admin dieser Chain.")
+    entry = "# rootsignature\n"+timestamp()+"## signature\n"
+    signature = unterschreiben("\n".join(JOKER_CHAIN['lines'])+"\n"+entry)
+    entry += signature
+    JOKER_CHAIN['lines']+=entry.strip().split("\n")
     return entry
 
 # publishes the JokerChain
@@ -207,11 +208,16 @@ def add_user(pub_key_file, numtokens=5):
     pubkey = file_to_byte_array(pub_key_file).decode("ascii")
     entry += pubkey
     entry += "## hash\n"
-    entry += get_hash_from_data(pubkey)+"\n"
+    hash = get_hash_from_key(pubkey)
+    entry += hash + "\n"
     entry += "## tokens\n"
     t = time.time()
-    entry +=" ".join([get_hash_from_data(str(t+i)) for i in range(numtokens)])+"\n"
+    tokens = [get_hash_from_data(str(t+i)) for i in range(numtokens)]
+    entry +=" ".join(tokens)+"\n"
     JOKER_CHAIN['lines']+=entry.strip().split("\n")
+    JOKER_CHAIN['keys'][hash]= pubkey
+    JOKER_CHAIN['tokens'][hash] = tokens
+    entry += sign_chain()
     return entry
 
 def is_end_of_section(pos):
@@ -237,66 +243,83 @@ def parse_root(pos):
     JOKER_CHAIN['adminhash'] = hash.strip()
     print("adminhash=%s, myhash=%s" % (JOKER_CHAIN['adminhash'], JOKER_CHAIN['myhash']))
     JOKER_CHAIN['admin'] = JOKER_CHAIN['adminhash']==JOKER_CHAIN['myhash']
+    JOKER_CHAIN['tokens'][hash.strip()]=[]
     if get_hash_from_key(JOKER_CHAIN['adminkey'])!=JOKER_CHAIN['adminhash']:
         raise ValueError("Oops! Der Hash vom öffentlichen Admin-Schlüssel ist falsch")
+    return pos
+
+def parse_rootsignature(pos):
+    pos+=1
     if JOKER_CHAIN['lines'][pos] != "## timestamp":
-        raise RuntimeError("Dritte subsection vom root muss ## timestamp sein")
+        raise RuntimeError("Erste subsection vom rootsignature muss ## timestamp sein")
     pos, t = parse_entry(pos)
     if JOKER_CHAIN['lines'][pos] != "## signature":
-        raise RuntimeError("Vierte subsection vom root muss ## signature sein")
+        raise RuntimeError("Zweite subsection vom rootsignature muss ## signature sein")
     sigtext = "\n".join(JOKER_CHAIN['lines'][0:(pos+1)])+"\n"
     pos, sig = parse_entry(pos)
     if not unterschrift_pruefen(sigtext, sig, JOKER_CHAIN['adminkey']):
         raise ValueError("Oops! Die Root-Unterschrift ist falsch.")
-    JOKER_CHAIN['keys'][JOKER_CHAIN['adminhash']] = JOKER_CHAIN['adminkey']
     return pos
+    
 
 def parse_user(pos):
     pos+=1
-    head = JOKER_CHAIN['lines'][pos]
-    while head[0:2]=="##":
-        print("parse_user on ->%s<-" % head)
-        if head == "## publickey":
-            pos, userkey = parse_entry(pos)
-        elif head == "## hash":
-            pos, userhash = parse_entry(pos)
-            userhash = userhash.strip()
-        elif head == "## tokens":
-            pos, tokens = parse_entry(pos)
-        else:
-            raise RuntimeError("Kaputte JokerChain! Keine Ahnung, was der Header ->"+head+"<- in der user-Section soll.")
-        if pos==len(JOKER_CHAIN['lines']):
-            break
-        head = JOKER_CHAIN['lines'][pos]
+    if JOKER_CHAIN['lines'][pos]!="## publickey":
+        raise RuntimeError("Erste subsection vom user muss ## publickey sein")
+    pos, userkey = parse_entry(pos)
+    if JOKER_CHAIN['lines'][pos]!="## hash":
+        raise RuntimeError("Zweite subsection vom user muss ## hash sein")
+    pos, userhash = parse_entry(pos)
+    userhash = userhash.strip()
+    if JOKER_CHAIN['lines'][pos]!="## tokens":
+        raise RuntimeError("Dritte subsection vom user muss ## tokens sein")
+    pos, tokens = parse_entry(pos)
+    tokens = tokens.strip().split(" ")
+    if get_hash_from_key(userkey)!=userhash:
+        raise ValueError("Oops! Der Hash vom öffentlichen User-Schlüssel ist falsch")
     JOKER_CHAIN['keys'][userhash] = userkey
+    JOKER_CHAIN['tokens'][userhash] = tokens
+    return pos
+
 
 def parse_joker_chain():
     if not os.path.exists(PUBLIC_KEY_FILE):
         raise FileExistsError
     JOKER_CHAIN['mypubkey'] = get_public_key()
     JOKER_CHAIN['myhash'] = get_hash_from_key_file(PUBLIC_KEY_FILE)
+    print("JOKER_CHAIN['myhash'] = %s" % JOKER_CHAIN['myhash'])
     # Current line to parse
-    pos = 0
+    if JOKER_CHAIN['lines'][0] != "# root":
+        raise RuntimeError("Erste section in der JokerChain muss # root sein")
+    pos = parse_root(0)
     while pos<len(JOKER_CHAIN['lines']):
         head = JOKER_CHAIN['lines'][pos]
-        print("Parsing ->%s<-" % head)
-        if head=="# root":
-            pos = parse_root(pos)
-        elif head=="# user":
+        # print("Parsing ->%s<-" % head)
+        if head=="# user":
             pos = parse_user(pos)
+        elif head=="# rootsignature":
+            pos = parse_rootsignature(pos)
         else:
             raise RuntimeError("Kaputte JokerChain! Header der Form ->"+head+"<- unbekannt.")
-        
+    boxprint("Joker-Chain geladen und verifiziert.")
+    if JOKER_CHAIN['myhash'] in JOKER_CHAIN['tokens']:
+        print("Anzahl Joker auf Ihrem Konto: %d" % (len(JOKER_CHAIN['tokens'][JOKER_CHAIN['myhash']])))
+    else:
+        print("Sie haben noch keine Joker. Senden Sie Ihren public-Key per e-mail dem Administrator!")
 
 
-
-# complete_delete()
-# new_key_pair()
-# new_joker_chain()
+if False:
+    complete_delete()
+    new_key_pair()
+    new_joker_chain()
+    add_user('testuser.pem')
+    save_joker_chain()
 # publish_joker_chain()
 # get_joker_chain_online()
-load_joker_chain()
-print(add_user('testuser.pem'))
+else:
+    load_joker_chain()
+#    add_user('testuser.pem')
+#    save_joker_chain()
 delete_temp_files()
 
 
