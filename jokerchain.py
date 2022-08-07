@@ -35,7 +35,7 @@ def reset_joker_chain_in_memory():
         args = JOKER_CHAIN['args']
     else:
         args = None
-    JOKER_CHAIN = {'lines':[], 'adminhash':'', 'adminkey':'', 'myhash':'', 'mypubkey':'', 'tokens':{}, 'admin':False, 'keys':{}, 'transactions':{}, 'names':{}, 'args':args}
+    JOKER_CHAIN = {'lines':[], 'adminhash':'', 'adminkey':'', 'myhash':'', 'mypubkey':'', 'tokens':{}, 'admin':False, 'keys':{}, 'transactions':{}, 'names':{}, 'args':args, 'signed':False}
 
 
 #################################
@@ -345,14 +345,11 @@ def assert_user_has_token(userhash, token):
 
 
 def parse_root(pos):
-    pos+=1
-    if JOKER_CHAIN['lines'][pos] != "## publickey":
-        raise RuntimeError("Erste subsection vom root muss ## publickey sein")
-    pos, JOKER_CHAIN['adminkey'] = parse_entry(pos)
-    if JOKER_CHAIN['lines'][pos] != "## keyhash":
-        raise RuntimeError("Zweite subsection vom root muss ## keyhash sein")
-    pos, hash = parse_entry(pos)
-    JOKER_CHAIN['adminhash'] = hash.strip()
+    pos, e = getSubsections(pos, ["publickey", "keyhash"])
+    hash = e['keyhash']
+    JOKER_CHAIN['adminkey'] = e['publickey']
+    JOKER_CHAIN['adminhash'] = hash
+    JOKER_CHAIN['keys'][hash] = JOKER_CHAIN['adminkey']
     JOKER_CHAIN['admin'] = JOKER_CHAIN['adminhash']==JOKER_CHAIN['myhash']
     JOKER_CHAIN['tokens'][hash.strip()]=[]
     if get_hash_from_key(JOKER_CHAIN['adminkey'])!=JOKER_CHAIN['adminhash']:
@@ -362,34 +359,19 @@ def parse_root(pos):
     return pos
 
 def parse_rootsignature(pos):
-    pos+=1
-    if JOKER_CHAIN['lines'][pos] != "## timestamp":
-        raise RuntimeError("Erste subsection vom rootsignature muss ## timestamp sein")
-    pos, t = parse_entry(pos)
-    if JOKER_CHAIN['lines'][pos] != "## signature":
-        raise RuntimeError("Zweite subsection vom rootsignature muss ## signature sein")
-    sigtext = "\n".join(JOKER_CHAIN['lines'][0:(pos+1)])+"\n"
-    pos, sig = parse_entry(pos)
-    if not unterschrift_pruefen(sigtext, sig, JOKER_CHAIN['adminkey']):
-        raise ValueError("Oops! Die Root-Unterschrift ist falsch.")
+    pos, e = getSubsections(pos, ["timestamp", "signature"])
+    check_last_signature(pos-1, JOKER_CHAIN['adminhash'])
     if JOKER_CHAIN['args'].verbose:
         print("Admin-Unterschrift der Joker-Chain bis Zeile %d überprüft." % pos)
+    JOKER_CHAIN['signed'] = True
     return pos
     
 
 def parse_user(pos):
-    pos+=1
-    if JOKER_CHAIN['lines'][pos]!="## publickey":
-        raise RuntimeError("Erste subsection vom user muss ## publickey sein")
-    pos, userkey = parse_entry(pos)
-    if JOKER_CHAIN['lines'][pos]!="## hash":
-        raise RuntimeError("Zweite subsection vom user muss ## hash sein")
-    pos, userhash = parse_entry(pos)
-    userhash = userhash.strip()
-    if JOKER_CHAIN['lines'][pos]!="## tokens":
-        raise RuntimeError("Dritte subsection vom user muss ## tokens sein")
-    pos, tokens = parse_entry(pos)
-    tokens = tokens.strip().split(" ")
+    pos, e = getSubsections(pos, ["publickey", "hash", "tokens"])
+    tokens = e['tokens'].split(" ")
+    userhash = e['hash']
+    userkey = e['publickey']
     if get_hash_from_key(userkey)!=userhash:
         raise ValueError("Oops! Der Hash vom öffentlichen User-Schlüssel ist falsch")
     JOKER_CHAIN['keys'][userhash] = userkey
@@ -442,6 +424,7 @@ def parse_joker_chain():
     while pos<len(JOKER_CHAIN['lines']):
         head = JOKER_CHAIN['lines'][pos]
         # print("Parsing ->%s<-" % head)
+        JOKER_CHAIN['signed'] = False
         if head=="# user":
             pos = parse_user(pos)
         elif head=="# rootsignature":
@@ -452,7 +435,10 @@ def parse_joker_chain():
             pos = parse_transfer(pos)
         else:
             raise RuntimeError("Kaputte JokerChain! Header der Form ->"+head+"<- unbekannt.")
-    boxprint("Joker-Chain geladen und verifiziert.")
+    if JOKER_CHAIN['signed']:
+        boxprint("JokerChain geladen und vollständig verifiziert.")
+    else:
+        boxprint("JokerChain geladen und auf Korrektheit überprüft.\nEs ist aber noch eine Admin-Unterschrift ausstehend.")
     if JOKER_CHAIN['myhash'] in JOKER_CHAIN['tokens']:
         if JOKER_CHAIN['args'].verbose:
             print("Ihre Transaktionen für das Konto %s:" % JOKER_CHAIN['myhash'])
@@ -507,9 +493,12 @@ elif args.adduserkeyfile:
     add_user(args.adduserkeyfile[0])
 elif args.sign:
     load_joker_chain()
-    sign_chain()
-    save_joker_chain()
-    publish_joker_chain()
+    if not JOKER_CHAIN['signed']:
+        sign_chain()
+        save_joker_chain()
+        publish_joker_chain()
+    else:
+        print("Chain is already signed!")
 else:
     load_joker_chain()
     
