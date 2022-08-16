@@ -19,7 +19,7 @@ import re
 PRIVATE_KEY_FILE = "secret-private-key-joker.pem"
 PUBLIC_KEY_FILE = "public-key-joker.pem"
 JOKER_CHAIN_FILE = "joker-chain.md"
-JOKER_CHAIN_URL = "https://fginfo.ksbg.ch/~ivo/"+JOKER_CHAIN_FILE
+JOKER_CHAIN_URL = "https://bloechligair.ch/jokerchain/"
 HASH_TO_NAME_FILE = "hash2name.txt"
 TEMP_FILE = "tempfile.bin"
 TEMP_KEY_FILE = "tempkey.pem"
@@ -175,13 +175,14 @@ def redeem_joker(datum):
     if len(JOKER_CHAIN['tokens'][myhash])==0:
         raise PermissionError("Tut mir leid, Sie haben keine Joker mehr.")
     token = JOKER_CHAIN['tokens'][myhash].pop()
-    JOKER_CHAIN['transactions'][hash] = ["Ein Joker am %s eingelöst. Anzahl Joker: %d" % (datum, len(JOKER_CHAIN['tokens'][hash]))]
+    JOKER_CHAIN['transactions'][myhash] = ["Ein Joker am %s eingelöst. Anzahl Joker: %d" % (datum, len(JOKER_CHAIN['tokens'][myhash]))]
     entry = "# usejoker\n## sender\n"+myhash+"\n## token\n"+token+"\n## usedate\n"+datum+"\n"+timestamp()
     JOKER_CHAIN['lines'] += entry.strip().split("\n")
     entry +=sign_chain()
     save_joker_chain()
-    boxprint("Senden Sie folgende Zeilen dem Admin:")
-    print(entry)
+    if JOKER_CHAIN['args'].verbose:
+        print(entry)
+    add_block_online(entry)
     return entry
 
 def transfer_joker(dsthash):
@@ -197,8 +198,9 @@ def transfer_joker(dsthash):
     JOKER_CHAIN['lines'] += entry.strip().split("\n")
     entry +=sign_chain()
     save_joker_chain()
-    boxprint("Senden Sie folgende Zeilen dem Admin:")
-    print(entry)
+    if JOKER_CHAIN['args'].verbose:
+        print(entry)
+    add_block_online(entry)
     return entry
 
 
@@ -206,7 +208,8 @@ def save_joker_chain():
     chain = "\n".join(JOKER_CHAIN['lines'])+"\n"
     with open(JOKER_CHAIN_FILE, "w") as f:
         f.write(chain)
-    boxprint("JokeChain saved to "+JOKER_CHAIN_FILE)
+    if JOKER_CHAIN['args'].verbose:
+        print("JokerChain saved to "+JOKER_CHAIN_FILE)
 
 def load_joker_chain():
     if not os.path.exists(JOKER_CHAIN_FILE):
@@ -256,25 +259,28 @@ def sign_chain():
     JOKER_CHAIN['lines']+=entry.strip().split("\n")
     return entry
 
-# publishes the JokerChain
-def publish_joker_chain():
-    if not JOKER_CHAIN['admin']:
-        raise PermissionError("Nur der Admin kann die Joker-Chain auf den Server laden.")
-    run_command(['scp', JOKER_CHAIN_FILE, 'ivo@fginfo:public_html/.'])
-    if JOKER_CHAIN['args'].verbose:
-        print("Chain published to server.")
 
 # Gets the JokerChain from Server, parses it and saves it
 def get_joker_chain_online():
-    response = requests.get('https://fginfo.ksbg.ch/~ivo/'+JOKER_CHAIN_FILE)
+    if JOKER_CHAIN['args'].verbose:
+        print("Getting chain from "+JOKER_CHAIN_URL)
+    response = requests.get(JOKER_CHAIN_URL)
     if response.status_code != 200:
         raise FileNotFoundError("Die aktuelle JokerChain konnte nicht vom Server geladen werden, Statuscode: "+response.status_code)
     reset_joker_chain_in_memory()
     JOKER_CHAIN['lines'] = response.text.strip().split("\n")
-    boxprint("JokerChain vom Server geladen")
+    if JOKER_CHAIN['args'].verbose:
+        boxprint("JokerChain vom Server geladen")
     parse_joker_chain()
     save_joker_chain()
 
+def add_block_online(block):
+    response = requests.post(JOKER_CHAIN_URL, data={'block':block})
+    if response.status_code != 200:
+        raise FileNotFoundError("Der neue Block konnte nicht an den Server gesendet werden, Statuscode: "+response.status_code+"\nResponse: "+response.text)
+    if JOKER_CHAIN['args'].verbose:
+        print(response.text)
+    get_joker_chain_online()
 
 def delete_temp_files():
     for file in [TEMP_FILE, TEMP_KEY_FILE, SIGNATURE_FILE, SIGNATURE_FILE64]:
@@ -307,6 +313,7 @@ def add_user(pub_key_file, numtokens=5):
     with open(HASH_TO_NAME_FILE, "a") as f:
         f.write(hash+"\n"+pub_key_file[0:-4]+"\n")
     save_joker_chain()
+    add_block_online(entry)
     return entry
 
 def is_end_of_section(pos):
@@ -345,6 +352,7 @@ def assert_user_has_token(userhash, token):
 
 
 def parse_root(pos):
+    JOKER_CHAIN['signed'] = False
     pos, e = getSubsections(pos, ["publickey", "keyhash"])
     hash = e['keyhash']
     JOKER_CHAIN['adminkey'] = e['publickey']
@@ -368,6 +376,7 @@ def parse_rootsignature(pos):
     
 
 def parse_user(pos):
+    JOKER_CHAIN['signed'] = False
     pos, e = getSubsections(pos, ["publickey", "hash", "tokens"])
     tokens = e['tokens'].split(" ")
     userhash = e['hash']
@@ -382,6 +391,7 @@ def parse_user(pos):
     return pos
 
 def parse_usejoker(pos):
+    JOKER_CHAIN['signed'] = False
     pos, e = getSubsections(pos, ["sender", "token", "usedate", "timestamp", "signature"])
     assert_user_has_token(e['sender'], e['token'])
     datumsigned = timestamp_to_date(e['timestamp'])
@@ -394,12 +404,13 @@ def parse_usejoker(pos):
     token = e['token']
     datum = e['usedate']
     JOKER_CHAIN['tokens'][hash].remove(token)
-    JOKER_CHAIN['transactions'][hash] = ["Ein Joker am %s eingelöst. Anzahl Joker: %d" % (datum, len(JOKER_CHAIN['tokens'][hash]))]
+    JOKER_CHAIN['transactions'][hash] += ["Ein Joker am %s eingelöst. Anzahl Joker: %d" % (datum, len(JOKER_CHAIN['tokens'][hash]))]
     if JOKER_CHAIN['args'].verbose:
         print("\033[35mUser %s hat token %s am %s eingelöst.\033[0m" % (hash, token, datum))
     return pos
 
 def parse_transfer(pos):
+    JOKER_CHAIN['signed'] = False
     pos, e = getSubsections(pos, ["sender", "token", "receiver", "timestamp", "signature"])
     assert_user_has_token(e['sender'], e['token'])
     assert_user_hash_exists(e['receiver'])
@@ -410,17 +421,33 @@ def parse_transfer(pos):
     JOKER_CHAIN['transactions'][e['receiver']].append("Ein Joker am %s von %s transferiert bekommen. Anzahl Joker: %d" % (timestamp_to_date(e['timestamp']), e['sender'], len(JOKER_CHAIN['tokens'][e['receiver']])))
     return pos
 
+def add_block(datei):
+    if not JOKER_CHAIN['admin']:
+        raise PermissionError("Nur der Admin kann Blöcke aus einer Datei anhängen.")
+    if not os.path.exists(datei):
+        raise FileNotFoundError("Die Datei mit dem neuen Block existiert nicht: "+datei)
+    pos = len(JOKER_CHAIN['lines'])
+    lines = file_to_byte_array(datei).decode("ascii").strip().split("\n")
+    print("Attempting to add\n"+"\n".join(lines))
+    JOKER_CHAIN['lines'] += lines
+    try:
+        parse_joker_chain(pos)
+        return True
+    except:
+        return False
 
-def parse_joker_chain():
-    if not os.path.exists(PUBLIC_KEY_FILE):
-        print("Keine Schlüsseldateien gefunden. Diese müssen im Verzeichnis liegen, wo das Programm ausgeführt wird. Eventuell müssen Sie erst Schlüssel erzeugen, mit der -n Option.")
-    else:
-        JOKER_CHAIN['mypubkey'] = get_public_key()
-        JOKER_CHAIN['myhash'] = get_hash_from_key_file(PUBLIC_KEY_FILE)
-    # Current line to parse
-    if JOKER_CHAIN['lines'][0] != "# root":
-        raise RuntimeError("Erste section in der JokerChain muss # root sein")
-    pos = parse_root(0)
+
+def parse_joker_chain(pos = None):
+    if pos==None:
+        if not os.path.exists(PUBLIC_KEY_FILE):
+            print("Keine Schlüsseldateien gefunden. Diese müssen im Verzeichnis liegen, wo das Programm ausgeführt wird. Eventuell müssen Sie erst Schlüssel erzeugen, mit der -n Option.")
+        else:
+            JOKER_CHAIN['mypubkey'] = get_public_key()
+            JOKER_CHAIN['myhash'] = get_hash_from_key_file(PUBLIC_KEY_FILE)
+        # Current line to parse
+        if JOKER_CHAIN['lines'][0] != "# root":
+            raise RuntimeError("Erste section in der JokerChain muss # root sein")
+        pos = parse_root(0)
     while pos<len(JOKER_CHAIN['lines']):
         head = JOKER_CHAIN['lines'][pos]
         # print("Parsing ->%s<-" % head)
@@ -456,8 +483,8 @@ def parse_joker_chain():
 # Kommandozeilenargumente festlegen und auswerten
 
 parser = argparse.ArgumentParser(description='Joker-Chain Tools.\nAlles was Sie zum Verwalten, Transferieren und Einlösen Ihrer Joker brauchen.')
-parser.add_argument('-v', '--verbose', action=argparse.BooleanOptionalAction, help="Zusätzliche Programminformationen ausgaben.")
-parser.add_argument('-f', '--force', action=argparse.BooleanOptionalAction, help="Dateien überschreiben.")
+parser.add_argument('-v', '--verbose', action='store_true', help="Zusätzliche Programminformationen ausgaben.")
+parser.add_argument('-f', '--force', action='store_true', help="Dateien überschreiben.")
 
 commands = parser.add_mutually_exclusive_group()
 commands.add_argument('-d', '--datum', nargs=1, type=str, help="Joker zum Datum im Dormat JJJJ-MM-DD einlösen.")
@@ -465,9 +492,9 @@ commands.add_argument('-t', '--transfer', nargs=1, type=str, help="Joker an user
 commands.add_argument('-n', '--newkeys', action='store_true', help="Neues Schlüsselpaar erzeugen. Erzeugt die Dateien public-key-joker.pem und secret-private-key-joker.pem")
 commands.add_argument('-u', '--update', action='store_true', help="Letzte Version vom Server laden.")
 commands.add_argument('-i', '--initialize', action='store_true', help="Komplett neue Chain als Admin anlegen.")
-commands.add_argument('-p', '--publish', action='store_true', help="Als Admin die aktuelle Chain auf den Server laden.")
 commands.add_argument('-a', '--adduserkeyfile', nargs=1, type=str, help="Mit Angabe einer Datei mit öffentlichem Schlüssel als Admin einen neuen User mit Jokern hinzufügen.")
-commands.add_argument('-s', '--sign', action='store_true', help="Als Admin die aktuelle Chain signieren und auf den Server laden.")
+commands.add_argument('-s', '--sign', action='store_true', help="Als Admin die aktuelle Chain signieren")
+commands.add_argument('-b', '--blockfile', nargs=1, type=str, help="Als Admin einen weiteren Abschnitt aus einer Datei hinzufügen (wenn dieser korrekt ist)")
 args = parser.parse_args()
 
 reset_joker_chain_in_memory()
@@ -485,9 +512,7 @@ elif args.update:
     get_joker_chain_online()
 elif args.initialize:
     new_joker_chain()
-elif args.publish:
-    load_joker_chain()
-    publish_joker_chain()
+    save_joker_chain()
 elif args.adduserkeyfile:
     load_joker_chain()
     add_user(args.adduserkeyfile[0])
@@ -496,10 +521,14 @@ elif args.sign:
     if not JOKER_CHAIN['signed']:
         sign_chain()
         save_joker_chain()
-        publish_joker_chain()
     else:
         print("Chain is already signed!")
-else:
+elif args.blockfile:
     load_joker_chain()
-    
+    if (add_block(args.blockfile[0])):
+        if not JOKER_CHAIN['signed']:
+            sign_chain()
+        save_joker_chain()
+else:
+    get_joker_chain_online()
 delete_temp_files()
