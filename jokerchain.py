@@ -356,7 +356,7 @@ def load_joker_chain():
 def load_hash_to_name_file():
     if os.path.exists(HASH_TO_NAME_FILE):
         with open(HASH_TO_NAME_FILE, "r") as f:
-            lines = [l.strip() for l in f.readlines()]
+            lines = [l.strip() for l in f.readlines() if len(l.strip())>0]
             for i in range(0, len(lines), 2):
                 JOKER_CHAIN['names'][lines[i]] = lines[i + 1]
         if JOKER_CHAIN['args'].verbose:
