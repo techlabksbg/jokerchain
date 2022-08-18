@@ -8,4 +8,5 @@ all:
 
 chain:	all
 	rsync -vu ../joker-chain.md ${DATA}
+	ssh root@mx chown -R www-data:www-data /var/www/html/jokerchain
 
