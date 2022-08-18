@@ -539,7 +539,7 @@ def parse_usejoker(pos):
     datum = e['usedate']
     JOKER_CHAIN['tokens'][hash].remove(token)
     JOKER_CHAIN['transactions'][hash] += ["Ein Joker am %s eingelöst. Anzahl Joker: %d" % (datum, len(JOKER_CHAIN['tokens'][hash]))]
-    JOKER_CHAIN['transactions'][JOKER_CHAIN['adminhash']].append("%s: %s (verbleibend %d)" % (datum, hash_or_name(hash),len(JOKER_CHAIN['tokens'][hash])))
+    JOKER_CHAIN['transactions'][JOKER_CHAIN['adminhash']].append("%s: Jokereinsatz \033[35m%s\033[0m (verbleibend %d)" % (datum, hash_or_name(hash),len(JOKER_CHAIN['tokens'][hash])))
     if JOKER_CHAIN['args'].verbose:
         print("\033[35mUser %s hat token %s am %s eingelöst.\033[0m" % (hash_or_name(hash), token, datum))
     return pos
@@ -555,7 +555,7 @@ def parse_transfer(pos):
         JOKER_CHAIN['tokens'][e['sender']].remove(e['token'])
         JOKER_CHAIN['transactions'][e['sender']].append("Ein Joker am %s an %s transferiert. Anzahl Joker: %d" % (timestamp_to_date(e['timestamp']), hash_or_name(e['receiver']), len(JOKER_CHAIN['tokens'][e['sender']])))
     else:
-        JOKER_CHAIN['transactions'][e['sender']].append("Ein Joker am %s an %s transferiert." % (timestamp_to_date(e['timestamp']), hash_or_name(e['receiver'])))
+        JOKER_CHAIN['transactions'][e['sender']].append("%s: Ein Joker an %s transferiert." % (timestamp_to_date(e['timestamp']), hash_or_name(e['receiver'])))
     JOKER_CHAIN['tokens'][e['receiver']].append(e['token'])
     JOKER_CHAIN['transactions'][e['receiver']].append("Ein Joker am %s von %s transferiert bekommen. Anzahl Joker: %d" % (timestamp_to_date(e['timestamp']), hash_or_name(e['sender']), len(JOKER_CHAIN['tokens'][e['receiver']])))
     return pos
@@ -607,17 +607,16 @@ def parse_joker_chain(pos = None):
  #    #   "m "#m#"  # # #  # # #  "mm"#  #   #  "#m##  "#m#"  #mmmm  "#mm"  mm#mm    "mm  "#mm" 
 
 parser = argparse.ArgumentParser(description='Joker-Chain Tools.\nAlles was Sie zum Verwalten, Transferieren und Einlösen Ihrer Joker brauchen.')
-parser.add_argument('-v', '--verbose', action='store_true', help="Zusätzliche Programminformationen ausgaben.")
+parser.add_argument('-v', '--verbose', action='store_true', help="Zusätzliche Programminformationen ausgeben.")
 parser.add_argument('-f', '--force', action='store_true', help="Dateien überschreiben.")
 
 commands = parser.add_mutually_exclusive_group()
 commands.add_argument('-d', '--datum', nargs=1, type=str, help="Joker zum Datum im Dormat JJJJ-MM-DD einlösen.")
 commands.add_argument('-t', '--transfer', nargs=1, type=str, help="Joker an user mit dem hash TRANSFER überweisen.")
 commands.add_argument('-n', '--newkeys', action='store_true', help="Neues Schlüsselpaar erzeugen. Erzeugt die Dateien public-key-joker.pem und secret-private-key-joker.pem")
-commands.add_argument('-u', '--update', action='store_true', help="Letzte Version vom Server laden.")
 commands.add_argument('-i', '--initialize', action='store_true', help="Komplett neue Chain als Admin anlegen.")
 commands.add_argument('-a', '--adduserkeyfile', nargs=1, type=str, help="Mit Angabe einer Datei mit öffentlichem Schlüssel als Admin einen neuen User mit Jokern hinzufügen.")
-commands.add_argument('-s', '--sign', action='store_true', help="Als Admin die aktuelle Chain signieren")
+commands.add_argument('-s', '--sign', action='store_true', help="Als Admin die aktuelle Chain manuell signieren (passiert sonst automatisch via Server)")
 commands.add_argument('-b', '--blockfile', nargs=1, type=str, help="Als Admin einen weiteren Abschnitt aus einer Datei hinzufügen (wenn dieser korrekt ist)")
 
  #     m    m                        m                                                           
@@ -640,8 +639,6 @@ elif args.transfer:
     transfer_joker(args.transfer[0])
 elif args.newkeys:
     new_key_pair()
-elif args.update:
-    get_joker_chain_online()
 elif args.initialize:
     new_joker_chain()
     save_joker_chain()
