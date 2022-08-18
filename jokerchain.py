@@ -168,6 +168,8 @@ def new_joker_chain():
             os.remove(JOKER_CHAIN_FILE)
         else:
             raise FileExistsError("Die Datei "+JOKER_CHAIN_FILE+" existiert bereits.")
+    if os.path.exists(HASH_TO_NAME_FILE):
+        os.remove(HASH_TO_NAME_FILE)
     entry = "# root\n## publickey\n"
     if not os.path.exists(PUBLIC_KEY_FILE):
         new_key_pair()
@@ -205,6 +207,8 @@ def add_user(pub_key_file, numtokens=5):
     entry += pubkey
     entry += "## hash\n"
     hash = get_hash_from_key(pubkey)
+    if hash in JOKER_CHAIN['keys']:
+        raise ValueError("Fehler: Der User %s ist bereits definiert." % hash_or_name(hash))
     entry += hash + "\n"
     entry += "## tokens\n"
     t = time.time()
@@ -514,6 +518,8 @@ def parse_user(pos):
     tokens = e['tokens'].split(" ")
     userhash = e['hash']
     userkey = e['publickey']
+    if userhash in JOKER_CHAIN['keys']:
+        raise ValueError("Ooops. Der User %s existiert bereits." % userhash)
     if get_hash_from_key(userkey)!=userhash:
         raise ValueError("Oops! Der Hash vom öffentlichen User-Schlüssel ist falsch")
     JOKER_CHAIN['keys'][userhash] = userkey
