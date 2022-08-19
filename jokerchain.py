@@ -203,7 +203,7 @@ def add_user(pub_key_file, numtokens=5):
     if not JOKER_CHAIN['admin']:
         raise PermissionError("Sie sind nicht Admin dieser Joker-Chain und können darum keine Nutzer hinzufügen")
     entry = "# user\n## publickey\n"
-    pubkey = file_to_byte_array(pub_key_file).decode("ascii")
+    pubkey = file_to_byte_array(pub_key_file).decode("ascii").replace("\r\n","\n")
     entry += pubkey
     entry += "## hash\n"
     hash = get_hash_from_key(pubkey)
@@ -277,7 +277,7 @@ def add_block(datei):
     if not os.path.exists(datei):
         raise FileNotFoundError("Die Datei mit dem neuen Block existiert nicht: "+datei)
     pos = len(JOKER_CHAIN['lines'])
-    lines = file_to_byte_array(datei).decode("ascii").strip().split("\n")
+    lines = file_to_byte_array(datei).decode("ascii").strip().replace("\r\n", "\n").split("\n")
 
     print("Attempting to add\n"+"\n".join(lines))
     JOKER_CHAIN['lines'] += lines
