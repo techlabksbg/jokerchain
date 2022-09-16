@@ -69,6 +69,9 @@ def run_command(cmd, comment=""):
 def timestamp():
     return "## timestamp\n"+str(time.time())+"\n"
 
+def timeNowISO():
+    return datetime.datetime.fromtimestamp(time.time()).strftime("%Y%m%dT%H%M%S")
+
 def timestamp_to_date(ts):
     return datetime.datetime.fromtimestamp(float(ts)).strftime("%Y-%m-%d")
 
@@ -338,6 +341,8 @@ def show_my_transactions():
 # Speicher die aktuelle JokerChain lokal
 def save_joker_chain():
     chain = "\n".join(JOKER_CHAIN['lines'])+"\n"
+    if (os.path.exists(JOKER_CHAIN_FILE)):
+        os.rename(JOKER_CHAIN_FILE, JOKER_CHAIN_FILE[:-3]+timeNowISO()+".md")
     with open(JOKER_CHAIN_FILE, "w") as f:
         f.write(chain)
     if JOKER_CHAIN['args'].verbose:
@@ -392,7 +397,7 @@ def get_joker_chain_online():
         print("Getting chain from "+JOKER_CHAIN_URL)
     response = requests.get(JOKER_CHAIN_URL)
     if response.status_code != 200:
-        raise FileNotFoundError("Die aktuelle JokerChain konnte nicht vom Server geladen werden, Statuscode: "+response.status_code)
+        raise FileNotFoundError("Die aktuelle JokerChain konnte nicht vom Server geladen werden, Statuscode: "+str(response.status_code))
     reset_joker_chain_in_memory()
     JOKER_CHAIN['lines'] = response.text.strip().split("\n")
     if JOKER_CHAIN['args'].verbose:
@@ -404,7 +409,10 @@ def get_joker_chain_online():
 def add_block_online(block):
     response = requests.post(JOKER_CHAIN_URL, data={'block':block})
     if response.status_code != 200:
-        raise FileNotFoundError("Der neue Block konnte nicht an den Server gesendet werden, Statuscode: "+response.status_code+"\nResponse: "+response.text)
+        raise FileNotFoundError("Der neue Block konnte nicht an den Server gesendet werden, Statuscode: "+str(response.status_code)+"\nResponse: "+response.text)
+    if response.text.split("\n")[0].strip()!="OK":
+        print(response.text)
+        raise ValueError("Fehler auf dem Server... Versuchen Sie es nochmals")
     if JOKER_CHAIN['args'].verbose:
         print(response.text)
     get_joker_chain_online()
@@ -622,8 +630,10 @@ commands.add_argument('-t', '--transfer', nargs=1, type=str, help="Joker an user
 commands.add_argument('-n', '--newkeys', action='store_true', help="Neues Schlüsselpaar erzeugen. Erzeugt die Dateien public-key-joker.pem und secret-private-key-joker.pem")
 commands.add_argument('-i', '--initialize', action='store_true', help="Komplett neue Chain als Admin anlegen.")
 commands.add_argument('-a', '--adduserkeyfile', nargs=1, type=str, help="Mit Angabe einer Datei mit öffentlichem Schlüssel als Admin einen neuen User mit Jokern hinzufügen.")
+parser.add_argument('-j', '--numjokers', nargs=1, type=int, help="Anzahl Joker zum start", default=5)
 commands.add_argument('-s', '--sign', action='store_true', help="Als Admin die aktuelle Chain manuell signieren (passiert sonst automatisch via Server)")
 commands.add_argument('-b', '--blockfile', nargs=1, type=str, help="Als Admin einen weiteren Abschnitt aus einer Datei hinzufügen (wenn dieser korrekt ist)")
+#commands.add_argument('-u', '--update', nargs=1, type=str, help="Joker-Chain vom Server laden.")
 
  #     m    m                        m                                                           
  #     #    #  mmm   m   m  mmmm   mm#mm  mmmm    m mm   mmm    mmmm   m mm   mmm   mmmmm  mmmmm 
@@ -649,8 +659,11 @@ elif args.initialize:
     new_joker_chain()
     save_joker_chain()
 elif args.adduserkeyfile:
-    load_joker_chain()
-    add_user(args.adduserkeyfile[0])
+    get_joker_chain_online()
+    if args.numjokers:
+        add_user(args.adduserkeyfile[0], args.numjokers[0])
+    else:
+        add_user(args.adduserkeyfile[0])
 elif args.sign:
     load_joker_chain()
     if not JOKER_CHAIN['signed']:
@@ -662,6 +675,8 @@ elif args.blockfile:
     load_joker_chain()
     if (add_block(args.blockfile[0])):
         save_joker_chain()
+    else:  # Fail with error code
+        exit(1)
 else:
     get_joker_chain_online()
 delete_temp_files()
