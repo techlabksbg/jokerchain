@@ -16,6 +16,7 @@ import argparse          # Kommandozeilenparameter auswerten und anzeigen
 import requests          # Webzugriffe leicht gemacht
 import re                # Erkennung von Textmustern
 import random            # Zufallszahlen
+import shutil
 
 # Globale Variablen (d.h. überall im Programm sicht- und verwendbar)
 PRIVATE_KEY_FILE = "secret-private-key-joker.pem"
@@ -342,7 +343,7 @@ def show_my_transactions():
 def save_joker_chain():
     chain = "\n".join(JOKER_CHAIN['lines'])+"\n"
     if (os.path.exists(JOKER_CHAIN_FILE)):
-        os.rename(JOKER_CHAIN_FILE, JOKER_CHAIN_FILE[:-3]+timeNowISO()+".md")
+        shutil.copyfile(JOKER_CHAIN_FILE, JOKER_CHAIN_FILE[:-3]+timeNowISO()+".md")
     with open(JOKER_CHAIN_FILE, "w") as f:
         f.write(chain)
     if JOKER_CHAIN['args'].verbose:
