@@ -39,7 +39,7 @@ def reset_joker_chain_in_memory():
         args = JOKER_CHAIN['args']
     else:
         args = None
-    JOKER_CHAIN = {'lines':[], 'adminhash':'', 'adminkey':'', 'myhash':'', 'mypubkey':'', 'tokens':{}, 'admin':False, 'keys':{}, 'transactions':{}, 'names':{}, 'args':args, 'signed':False}
+    JOKER_CHAIN = {'lines':[], 'adminhash':'', 'adminkey':'', 'myhash':'', 'mypubkey':'', 'tokens':{}, 'admin':False, 'keys':{}, 'transactions':{}, 'names':{}, 'name_to_hash':{}, 'args':args, 'signed':False}
 
 #      m    m        ""#                        
 #      #    #  mmm     #    mmmm    mmm    m mm 
@@ -322,6 +322,12 @@ def hash_or_name(hash):
         return "%s (%s)" % (JOKER_CHAIN['names'][hash], hash)
     return hash
 
+# returns the hash for a given name (from the file hash2name.txt)
+def hash_from_name_or_hash(hash):
+    if 'name_to_hash' in JOKER_CHAIN and hash in JOKER_CHAIN['name_to_hash']:
+        return JOKER_CHAIN['name_to_hash'][hash]
+    return hash
+
 def show_my_transactions():
     if JOKER_CHAIN['admin']:
         for t in sorted(JOKER_CHAIN['transactions'][JOKER_CHAIN['myhash']]):
@@ -372,6 +378,7 @@ def load_hash_to_name_file():
             lines = [l.strip() for l in f.readlines() if len(l.strip())>0]
             for i in range(0, len(lines), 2):
                 JOKER_CHAIN['names'][lines[i]] = lines[i + 1]
+                JOKER_CHAIN['name_to_hash'][lines[i+1]] = lines[i]
         if JOKER_CHAIN['args'].verbose:
             print("Loaded file "+HASH_TO_NAME_FILE)
     elif JOKER_CHAIN['args'].verbose:
@@ -658,7 +665,7 @@ if args.datum:
     redeem_joker(args.datum[0])
 elif args.transfer:
     get_joker_chain_online()
-    transfer_joker(args.transfer[0])
+    transfer_joker(hash_from_name_or_hash(args.transfer[0]))
 elif args.newkeys:
     new_key_pair()
 elif args.initialize:
