@@ -343,7 +343,10 @@ def show_my_transactions():
 def save_joker_chain():
     chain = "\n".join(JOKER_CHAIN['lines'])+"\n"
     if (os.path.exists(JOKER_CHAIN_FILE)):
-        shutil.copyfile(JOKER_CHAIN_FILE, JOKER_CHAIN_FILE[:-3]+timeNowISO()+".md")
+        backup = JOKER_CHAIN_FILE[:-3]+timeNowISO()+".md"
+        if (os.path.exists(backup)):
+            os.remove(backup)
+        shutil.copyfile(JOKER_CHAIN_FILE, backup)
     with open(JOKER_CHAIN_FILE, "w") as f:
         f.write(chain)
     if JOKER_CHAIN['args'].verbose:
