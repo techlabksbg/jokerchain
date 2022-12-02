@@ -638,7 +638,7 @@ parser.add_argument('-v', '--verbose', action='store_true', help="Zusätzliche P
 parser.add_argument('-f', '--force', action='store_true', help="Dateien überschreiben.")
 
 commands = parser.add_mutually_exclusive_group()
-commands.add_argument('-d', '--datum', nargs=1, type=str, help="Joker zum Datum im Dormat JJJJ-MM-DD einlösen.")
+commands.add_argument('-d', '--datum', nargs=1, type=str, help="Joker zum Datum im Format JJJJ-MM-DD einlösen.")
 commands.add_argument('-t', '--transfer', nargs=1, type=str, help="Joker an user mit dem hash TRANSFER überweisen.")
 commands.add_argument('-n', '--newkeys', action='store_true', help="Neues Schlüsselpaar erzeugen. Erzeugt die Dateien public-key-joker.pem und secret-private-key-joker.pem")
 commands.add_argument('-i', '--initialize', action='store_true', help="Komplett neue Chain als Admin anlegen.")
