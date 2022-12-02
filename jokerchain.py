@@ -576,6 +576,8 @@ def parse_transfer(pos):
         JOKER_CHAIN['transactions'][e['sender']].append("%s: Ein Joker an %s transferiert." % (timestamp_to_date(e['timestamp']), hash_or_name(e['receiver'])))
     JOKER_CHAIN['tokens'][e['receiver']].append(e['token'])
     JOKER_CHAIN['transactions'][e['receiver']].append("Ein Joker am %s von %s transferiert bekommen. Anzahl Joker: %d" % (timestamp_to_date(e['timestamp']), hash_or_name(e['sender']), len(JOKER_CHAIN['tokens'][e['receiver']])))
+    if JOKER_CHAIN['args'].verbose:
+        print("\033[35mUser %s hat token %s an %s transferiert.\033[0m" % (hash_or_name(e['sender']), e['token'], hash_or_name(e['receiver'])))
     return pos
 
 
