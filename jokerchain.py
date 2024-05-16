@@ -641,6 +641,7 @@ commands = parser.add_mutually_exclusive_group()
 commands.add_argument('-d', '--datum', nargs=1, type=str, help="Joker zum Datum im Format JJJJ-MM-DD einlösen.")
 commands.add_argument('-t', '--transfer', nargs=1, type=str, help="Joker an user mit dem hash TRANSFER überweisen.")
 commands.add_argument('-n', '--newkeys', action='store_true', help="Neues Schlüsselpaar erzeugen. Erzeugt die Dateien public-key-joker.pem und secret-private-key-joker.pem")
+commands.add_argument('-p', '--printhash', nargs=1, type=str, help="Hash zu einem public key ausgeben.")
 commands.add_argument('-i', '--initialize', action='store_true', help="Komplett neue Chain als Admin anlegen.")
 commands.add_argument('-a', '--adduserkeyfile', nargs=1, type=str, help="Mit Angabe einer Datei mit öffentlichem Schlüssel als Admin einen neuen User mit Jokern hinzufügen.")
 parser.add_argument('-j', '--numjokers', nargs=1, type=int, help="Anzahl Joker zum start", default=5)
@@ -668,6 +669,8 @@ elif args.transfer:
     transfer_joker(hash_from_name_or_hash(args.transfer[0]))
 elif args.newkeys:
     new_key_pair()
+elif args.printhash:
+    print(f"Hash for file {args.printhash[0]} is {get_hash_from_key_file(args.printhash[0])}")
 elif args.initialize:
     new_joker_chain()
     save_joker_chain()
